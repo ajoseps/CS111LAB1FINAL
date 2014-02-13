@@ -7,13 +7,369 @@
 #include <stdio.h>
 //#include <error.h>
 
+//CUSTOM INCLUDES
+#include "alloc.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <ctype.h>
+
+#define NULL_TERMINATOR '\0'
+#define EMPTY ''
+#define TAB '\t'
+#define SPACE ' '
+#define QUOTE '\"'
+#define AMPER '&'
+#define GREATER '>'
+#define LESSER '<'
+#define PIPE '|'
+#define SEMICOLON ';'
+#define COLON ':'
+#define POUND '#'
+#define OPEN_P '('
+#define CLOSE_P ')'
+#define NEWLINE '\n'
+#define TAB '\t'
+#define MAX_TOKEN_LENGTH 50
+
+// Token Type
+typedef enum{
+  AND_T,         // A && B
+  SEQUENCE_T,    // A ; B
+  OR_T,          // A || B
+  PIPE_T,        // A | B
+  SIMPLE_T,      // A token that is not a special symbol
+  OPEN_PARENS_T,  // (
+  CLOSE_PARENS_T, // )
+  NULL_T,        // \0
+  GREATER_T,     // >
+  DOUBLE_GREATER_T, // >>
+  LESS_T,       // <
+  DOUBLE_LESSER_T, // <<
+  QUOTE_T,      // "
+  COMMENT_T,     // #
+  EOF_T         // EOF
+} token_type;
+
+// Token
+typedef struct{
+  char* buffer;
+  token_type type;
+} token;
+
+struct command_stream{
+  // Function and argument pointer
+  int (*get_next_byte)(void *);
+  void *arg;
+  
+  // Current line
+  int linecount;
+  
+  // Tokens
+  token currToken;
+  token nextToken;
+  int maxTokenLength;
+};
+
+//Function Protypes
+bool is_valid_char(int c);
+token get_token(command_stream_t c_stream);
+int get_byte(command_stream_t c_stream);
+void unget_byte(int c, command_stream_t c_stream);
+bool is_special_char(char c);
+bool is_legal_char(char c);
+void add_to_buffer(command_stream_t c_stream, char* buffer, char c, int* index);
+//
+
+// Initializes the stuct command_stream
+command_stream_t
+init_command_stream(command_stream_t c_stream, int (*get_next_byte) (void *), void *get_next_byte_argument)
+{
+  c_stream = checked_malloc(sizeof(struct command_stream));
+  
+  c_stream->get_next_byte = get_next_byte;
+  c_stream->arg = get_next_byte_argument;
+  
+  c_stream->linecount = 1;
+  
+  c_stream->currToken.buffer = checked_malloc(sizeof(char) * MAX_TOKEN_LENGTH);
+  c_stream->nextToken.buffer = checked_malloc(sizeof(char) * MAX_TOKEN_LENGTH);
+  
+  c_stream->currToken.buffer[0] = NULL_TERMINATOR;
+  c_stream->nextToken.buffer[0] = NULL_TERMINATOR;
+  
+  c_stream->currToken.type = NULL_T;
+  c_stream->nextToken.type = NULL_T;
+  
+  c_stream->maxTokenLength = MAX_TOKEN_LENGTH;
+  
+  return c_stream;
+}
+
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
-  printf("command reading not yet implemented");
+  printf("command reading not yet implemented \n");
   //error (1, 0, "command reading not yet implemented");
-  return 0;
+  
+  command_stream_t c_stream = checked_malloc(sizeof(struct command_stream));
+  c_stream = init_command_stream(c_stream, get_next_byte, get_next_byte_argument);
+  
+  token tmp = get_token(c_stream);
+  do {
+    printf("%s \n", tmp.buffer);
+    tmp = get_token(c_stream);
+  } while (tmp.type != EOF_T);
+  
+  return c_stream;
+}
+
+token
+get_token(command_stream_t c_stream)
+{
+  char* nextTokenBuffer = c_stream->nextToken.buffer;
+  
+  printf("This is current buffer: %s\n", c_stream->currToken.buffer);
+  printf("This is next buffer: %s\n", c_stream->nextToken.buffer);
+  strcpy(c_stream->currToken.buffer, nextTokenBuffer);
+  c_stream->currToken = c_stream->nextToken;
+  nextTokenBuffer[0] = NULL_TERMINATOR;
+  
+  int curr;
+  int index = 0;
+  
+  while( (curr = get_byte(c_stream)) )
+  {
+    while( curr == SPACE || curr == TAB)
+    {
+      curr = get_byte(c_stream);
+    }
+    while( curr == POUND)
+    {
+      do
+      {
+        curr = get_byte(c_stream);
+      }while(curr != NEWLINE);
+      // To get rid of the NEWLINE
+      curr = get_byte(c_stream);
+      c_stream->linecount++;
+    }
+    
+    if(curr == EOF)
+    {
+      token endToken;
+      endToken.buffer = NULL;
+      endToken.type = EOF_T;
+      c_stream->nextToken = endToken;
+    }
+    if(is_legal_char(curr))
+    {
+      // If the char is part of a word and not an operator
+      if(is_valid_char(curr))
+      {
+        while(is_valid_char(curr))
+        {
+          add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+          curr = get_byte(c_stream);
+        }
+        // goes back a char so it doesn't contain a nonvalid char
+        unget_byte(curr, c_stream);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type  = SIMPLE_T;
+        break;
+      }
+      // Operators
+      else if(curr == AMPER)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        curr = get_byte(c_stream);
+        // If this is an AND
+        if(curr ==  AMPER)
+        {
+          add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+          nextTokenBuffer[index] = NULL_TERMINATOR;
+          c_stream->nextToken.type  = AND_T;
+          break;
+        }
+        else
+        {
+          //error (1, 0, "wandering ampersand");
+          printf("wandering ampersand: %c \n", curr);
+        }
+      }
+      else if(curr == PIPE)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        curr = get_byte(c_stream);
+        // if this is an OR
+        if(curr == PIPE)
+        {
+          add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+          nextTokenBuffer[index] = NULL_TERMINATOR;
+          c_stream->nextToken.type  = OR_T;
+          break;
+        }
+        unget_byte(curr, c_stream);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type  = PIPE_T;
+        break;
+      }
+      else if(curr == LESSER)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        curr = get_byte(c_stream);
+        // if this is a double lesser
+        if(curr == LESSER)
+        {
+          add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+          nextTokenBuffer[index] = NULL_TERMINATOR;
+          c_stream->nextToken.type  = DOUBLE_LESSER_T;
+          break;
+        }
+        unget_byte(curr, c_stream);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type  = LESS_T;
+        break;
+      }
+      else if(curr == GREATER)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        curr = get_byte(c_stream);
+        // if this is a double greater
+        if(curr == GREATER)
+        {
+          add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+          nextTokenBuffer[index] = NULL_TERMINATOR;
+          c_stream->nextToken.type = DOUBLE_GREATER_T;
+          break;
+        }
+        unget_byte(curr, c_stream);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type = GREATER_T;
+        break;
+      }
+      else if(curr == OPEN_P)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type = OPEN_PARENS_T;
+        break;
+      }
+      else if(curr == CLOSE_P)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type = CLOSE_PARENS_T;
+        break;
+      }
+      else if(curr == SEMICOLON)
+      {
+        add_to_buffer(c_stream, nextTokenBuffer, curr, &index);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type  = SEQUENCE_T;
+        break;
+      }
+      else if(curr == NEWLINE)
+      {
+        c_stream->linecount++;
+        
+        curr = get_byte(c_stream);
+        while(curr == NEWLINE){
+          curr = get_byte(c_stream);
+          c_stream->linecount++;
+        }
+        unget_byte(curr, c_stream);
+      }
+      else
+      {
+        //error (1, 0, "something wrong");
+        printf("something wrong: %c \n", curr);
+        break;
+      }
+    }
+    else
+    {
+      //error (1, 0, "illegal character");
+      printf("illegal char: %c \n", curr);
+      break;
+    }
+  }
+  return c_stream->currToken;
+}
+
+// safely adds to buffer with reallocation if necessary
+void
+add_to_buffer(command_stream_t c_stream, char* buffer, char c, int* index)
+{
+  // Resizing
+  if(*index >= c_stream->maxTokenLength - 1)
+  {
+    c_stream->maxTokenLength += 25;
+    buffer = checked_realloc(buffer, sizeof(char) * c_stream->maxTokenLength);
+  }
+  buffer[*index] = c;
+  *index = *index + 1;
+}
+
+// Returns true if c is a character that is part of any legal command
+bool
+is_legal_char(char c)
+{
+  if(is_special_char(c) || is_valid_char(c) || c == SPACE || c == POUND || c == NEWLINE || c == TAB)
+    return true;
+  else
+    return false;
+}
+
+// Returns true if c is a character that is part of a command
+bool
+is_special_char(char c)
+{
+  switch(c)
+  {
+    case OPEN_P:
+    case CLOSE_P:
+    case SEMICOLON:
+    case PIPE:
+    case AMPER:
+    case LESSER:
+    case GREATER:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// returns the next byte
+int
+get_byte(command_stream_t c_stream)
+{
+  return c_stream->get_next_byte(c_stream->arg);
+}
+
+// returns pointer to the prior byte
+void
+unget_byte(int c, command_stream_t c_stream)
+{
+  ungetc(c,c_stream->arg);
+}
+
+// returns true if c is a character that is valid for input and not part of an operator
+bool
+is_valid_char(int c)
+{
+  if( (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')
+     || (c >= 'a' && c <= 'z') || c == '!'
+     || c == '%' || c == '+'
+     || c == ',' || c == '-'
+     || c == '.' || c == '/'
+     || c == ':' || c == '@'
+     || c == '^' || c == '_' || c == '=' || c == '$') // = and $ are technically not valid
+    return true;
+  else
+    return false;
 }
 
 command_t

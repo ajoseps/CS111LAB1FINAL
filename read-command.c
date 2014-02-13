@@ -18,7 +18,7 @@
 #define NULL_TERMINATOR '\0'
 #define EMPTY ''
 #define TAB '\t'
-#define SPACE ' '
+#define SPACE 32
 #define QUOTE '\"'
 #define AMPER '&'
 #define GREATER '>'
@@ -31,6 +31,7 @@
 #define CLOSE_P ')'
 #define NEWLINE '\n'
 #define TAB '\t'
+#define LINEFEED '\r'
 #define MAX_TOKEN_LENGTH 50
 
 // Token Type
@@ -77,9 +78,9 @@ bool is_valid_char(int c);
 token get_token(command_stream_t c_stream);
 int get_byte(command_stream_t c_stream);
 void unget_byte(int c, command_stream_t c_stream);
-bool is_special_char(char c);
-bool is_legal_char(char c);
-void add_to_buffer(command_stream_t c_stream, char* buffer, char c, int* index);
+bool is_special_char(int c);
+bool is_legal_char(int c);
+void add_to_buffer(command_stream_t c_stream, char* buffer, int c, int* index);
 //
 
 // Initializes the stuct command_stream
@@ -131,10 +132,10 @@ get_token(command_stream_t c_stream)
 {
   char* nextTokenBuffer = c_stream->nextToken.buffer;
   
-  printf("This is current buffer: %s\n", c_stream->currToken.buffer);
-  printf("This is next buffer: %s\n", c_stream->nextToken.buffer);
+  //printf("This is current buffer: %s\n", c_stream->currToken.buffer);
+  //printf("This is next buffer: %s\n", c_stream->nextToken.buffer);
   strcpy(c_stream->currToken.buffer, nextTokenBuffer);
-  c_stream->currToken = c_stream->nextToken;
+  c_stream->currToken.type = c_stream->nextToken.type;
   nextTokenBuffer[0] = NULL_TERMINATOR;
   
   int curr;
@@ -157,12 +158,12 @@ get_token(command_stream_t c_stream)
       c_stream->linecount++;
     }
     
-    if(curr == EOF)
+    if(curr == EOF || curr == -1)
     {
       token endToken;
       endToken.buffer = NULL;
       endToken.type = EOF_T;
-      c_stream->nextToken = endToken;
+      return endToken;
     }
     if(is_legal_char(curr))
     {
@@ -281,18 +282,19 @@ get_token(command_stream_t c_stream)
           c_stream->linecount++;
         }
         unget_byte(curr, c_stream);
+        break;
       }
       else
       {
         //error (1, 0, "something wrong");
-        printf("something wrong: %c \n", curr);
+        printf("something wrong: %i \n", curr);
         break;
       }
     }
     else
     {
       //error (1, 0, "illegal character");
-      printf("illegal char: %c \n", curr);
+      printf("illegal char: %i \n", curr);
       break;
     }
   }
@@ -301,10 +303,10 @@ get_token(command_stream_t c_stream)
 
 // safely adds to buffer with reallocation if necessary
 void
-add_to_buffer(command_stream_t c_stream, char* buffer, char c, int* index)
+add_to_buffer(command_stream_t c_stream, char* buffer, int c, int* index)
 {
   // Resizing
-  if(*index >= c_stream->maxTokenLength - 1)
+  if(*index >= c_stream->maxTokenLength - 2)
   {
     c_stream->maxTokenLength += 25;
     buffer = checked_realloc(buffer, sizeof(char) * c_stream->maxTokenLength);
@@ -315,7 +317,7 @@ add_to_buffer(command_stream_t c_stream, char* buffer, char c, int* index)
 
 // Returns true if c is a character that is part of any legal command
 bool
-is_legal_char(char c)
+is_legal_char(int c)
 {
   if(is_special_char(c) || is_valid_char(c) || c == SPACE || c == POUND || c == NEWLINE || c == TAB)
     return true;
@@ -325,7 +327,7 @@ is_legal_char(char c)
 
 // Returns true if c is a character that is part of a command
 bool
-is_special_char(char c)
+is_special_char(int c)
 {
   switch(c)
   {
@@ -366,7 +368,9 @@ is_valid_char(int c)
      || c == ',' || c == '-'
      || c == '.' || c == '/'
      || c == ':' || c == '@'
-     || c == '^' || c == '_' || c == '=' || c == '$') // = and $ are technically not valid
+     || c == '^' || c == '_' || c == '=' || c == '$' || c == '\"' || c == '\'' || c == '\\' || c == ' ')
+    // || c == '{' || c == '}' ||
+    // =, ", ', and $ are technically not valid
     return true;
   else
     return false;

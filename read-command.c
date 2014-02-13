@@ -81,6 +81,7 @@ void unget_byte(int c, command_stream_t c_stream);
 bool is_special_char(int c);
 bool is_legal_char(int c);
 void add_to_buffer(command_stream_t c_stream, char* buffer, int c, int* index);
+command_t command_filter(command_stream_t c_stream);
 //
 
 // Initializes the stuct command_stream
@@ -377,9 +378,87 @@ is_valid_char(int c)
 }
 
 command_t
+command_filter(command_stream_t c_stream){
+  return 0;
+}
+
+command_t
+command_filter_pipe(command_stream_t c_stream)
+{
+  return 0;
+}
+
+
+
+command_t
+command_filter_pipe(command_stream_t c_stream)
+{
+  
+}
+
+command_t
+command_filter_and_or(command_stream_t c_stream)
+{
+  command_t operand1 = command_filter_pipe(c_stream);
+  
+  while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
+  {
+    get_token(c_stream);
+    command_t operand2 = command_filter_pipe(c_stream);
+    command_t and_or = checked_malloc(sizeof(struct command));
+    
+    if(c_stream->currToken.type == AND_T)
+    {
+      and_or->type = AND_COMMAND;
+      
+    }
+    else if(c_stream->currToken.type == OR_T)
+    {
+      and_or->type = OR_COMMAND;
+    }
+    
+    and_or->input=0;
+    and_or->output=0;
+    and_or->status=-1;
+    and_or->u.command[0]=operand1;
+    and_or->u.command[1]=operand2;
+    operand1 = and_or;
+  }
+  return operand1;
+}
+
+command_t
+command_filter_simple(command_stream_t c_stream){
+  get_token(c_stream);
+  
+  if(c_stream->currToken.type == EOF_T)
+    return NULL;
+  else if(c_stream->currToken.type != SIMPLE_T)
+  {
+    //error (1, 0, "command reading not yet implemented");
+    printf("command filter simple error");
+    return NULL;
+  }
+  
+  command_t simple = checked_malloc(sizeof(struct command));
+  simple->input=0;
+  simple->output=0;
+  simple->status=-1;
+  simple->u.word = &c_stream->currToken.buffer;
+  
+  return simple;
+}
+
+command_t
 read_command_stream (command_stream_t s)
 {
   printf("command reading not yet implemented");
   //error (1, 0, "command reading not yet implemented");
-  return 0;
+  
+  if(s->nextToken.type == EOF_T)
+    return NULL;
+  else{
+    get_token(s);
+    return command_filter(s);
+  }
 }

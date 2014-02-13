@@ -50,6 +50,7 @@ typedef enum{
   DOUBLE_LESSER_T, // <<
   QUOTE_T,      // "
   COMMENT_T,     // #
+  NEWLINE_T,    // \n
   EOF_T         // EOF
 } token_type;
 
@@ -66,6 +67,8 @@ struct command_stream{
   
   // Current line
   int linecount;
+  // Count of unclosed parantheses
+  int pcount;
   
   // Tokens
   token currToken;
@@ -81,7 +84,6 @@ void unget_byte(int c, command_stream_t c_stream);
 bool is_special_char(int c);
 bool is_legal_char(int c);
 void add_to_buffer(command_stream_t c_stream, char* buffer, int c, int* index);
-command_t command_filter(command_stream_t c_stream);
 //
 
 // Initializes the stuct command_stream
@@ -118,13 +120,13 @@ make_command_stream (int (*get_next_byte) (void *),
   
   command_stream_t c_stream = checked_malloc(sizeof(struct command_stream));
   c_stream = init_command_stream(c_stream, get_next_byte, get_next_byte_argument);
-  
+  /*
   token tmp = get_token(c_stream);
   do {
     printf("%s \n", tmp.buffer);
     tmp = get_token(c_stream);
   } while (tmp.type != EOF_T);
-  
+  */
   return c_stream;
 }
 
@@ -283,6 +285,8 @@ get_token(command_stream_t c_stream)
           c_stream->linecount++;
         }
         unget_byte(curr, c_stream);
+        nextTokenBuffer[index] = NULL_TERMINATOR;
+        c_stream->nextToken.type = NEWLINE_T;
         break;
       }
       else
@@ -378,57 +382,8 @@ is_valid_char(int c)
 }
 
 command_t
-command_filter(command_stream_t c_stream){
-  return 0;
-}
-
-command_t
-command_filter_pipe(command_stream_t c_stream)
+command_filter_simple(command_stream_t c_stream)
 {
-  return 0;
-}
-
-
-
-command_t
-command_filter_pipe(command_stream_t c_stream)
-{
-  
-}
-
-command_t
-command_filter_and_or(command_stream_t c_stream)
-{
-  command_t operand1 = command_filter_pipe(c_stream);
-  
-  while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
-  {
-    get_token(c_stream);
-    command_t operand2 = command_filter_pipe(c_stream);
-    command_t and_or = checked_malloc(sizeof(struct command));
-    
-    if(c_stream->currToken.type == AND_T)
-    {
-      and_or->type = AND_COMMAND;
-      
-    }
-    else if(c_stream->currToken.type == OR_T)
-    {
-      and_or->type = OR_COMMAND;
-    }
-    
-    and_or->input=0;
-    and_or->output=0;
-    and_or->status=-1;
-    and_or->u.command[0]=operand1;
-    and_or->u.command[1]=operand2;
-    operand1 = and_or;
-  }
-  return operand1;
-}
-
-command_t
-command_filter_simple(command_stream_t c_stream){
   get_token(c_stream);
   
   if(c_stream->currToken.type == EOF_T)
@@ -450,6 +405,137 @@ command_filter_simple(command_stream_t c_stream){
 }
 
 command_t
+command_parse(command_stream_t c_stream)
+{
+  command_t comm = checked_malloc(sizeof(struct command));
+  
+  while(c_stream->nextToken.type == NEWLINE)
+  {
+    get_token(c_stream);
+    c_stream->linecount++;
+  }
+  printf("linecount: %i \n", c_stream->linecount);
+  printf("curr buffer: %s \n", c_stream->currToken.buffer);
+  printf("next buffer: %s \n", c_stream->nextToken.buffer);
+  switch(c_stream->nextToken.type)
+  {
+    case NEWLINE_T:
+    case SEQUENCE_T:
+    {
+      command_t operand1 = command_parse(c_stream);
+      while(c_stream->nextToken.type == NEWLINE_T || c_stream->nextToken.type == SEQUENCE_T)
+      {
+        get_token(c_stream);
+        if(c_stream->nextToken.type == EOF_T)
+          break;
+        else
+        {
+          command_t operand2 = command_parse(c_stream);
+          
+          comm->type = SEQUENCE_COMMAND;
+          comm->status = -1;
+          comm->input = 0;
+          comm->output = 0;
+          comm->u.command[0] = operand1;
+          comm->u.command[1] = operand2;
+        }
+      }
+      break;
+    }
+    case AND_T:
+    case OR_T:
+    {
+      command_t operand1 = command_parse(c_stream);
+      while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
+      {
+        get_token(c_stream);
+        command_t operand2 = command_parse(c_stream);
+        
+        if(c_stream->currToken.type == AND_T)
+        {
+          comm->type = AND_COMMAND;
+          
+        }
+        else if(c_stream->currToken.type == OR_T)
+        {
+          comm->type = OR_COMMAND;
+        }
+        comm->status=-1;
+        comm->input=0;
+        comm->output=0;
+        comm->u.command[0]=operand1;
+        comm->u.command[1]=operand2;
+      }
+      break;
+    }
+    case PIPE_T:
+    {
+      command_t operand1 = command_parse(c_stream);
+      while(c_stream->nextToken.type == PIPE_T)
+      {
+        get_token(c_stream);
+        command_t operand2 = command_parse(c_stream);
+        
+        comm->status=-1;
+        comm->input=0;
+        comm->output=0;
+        comm->u.command[0]=operand1;
+        comm->u.command[1]=operand2;
+      }
+      break;
+    }
+    case SIMPLE_T:
+    {
+      get_token(c_stream);
+      
+      if(c_stream->currToken.type == EOF_T)
+        return NULL;
+      else if(c_stream->currToken.type != SIMPLE_T)
+      {
+        //error (1, 0, "command reading not yet implemented");
+        printf("command filter simple error");
+        return NULL;
+      }
+      comm->input = 0;
+      comm->output = 0;
+      comm->status=-1;
+      strcpy(*comm->u.word, c_stream->currToken.buffer);
+      
+      if(c_stream->nextToken.type == LESS_T)
+      {
+        get_token(c_stream);
+        if(c_stream->nextToken.type == SIMPLE_T)
+        {
+          comm->input= checked_malloc(sizeof( strlen(c_stream->currToken.buffer)) + 1);
+          comm->input = strcpy(comm->input, c_stream->currToken.buffer);
+        }
+        else
+        {
+          // error(1, 0, "error!");
+          printf("Error!");
+        }
+      }
+      else if(c_stream->nextToken.type == GREATER_T)
+      {
+        get_token(c_stream);
+        if(c_stream->nextToken.type == SIMPLE_T)
+        {
+          comm->output = checked_malloc(sizeof( strlen(c_stream->currToken.buffer)) + 1);
+          comm->output = strcpy(comm->input, c_stream->currToken.buffer);
+        }
+        else
+        {
+          // error(1, 0, "error!");
+          printf("Error!");
+        }
+      }
+      break;
+    }
+  }
+  return comm;
+}
+
+command_t
 read_command_stream (command_stream_t s)
 {
   printf("command reading not yet implemented");
@@ -459,6 +545,6 @@ read_command_stream (command_stream_t s)
     return NULL;
   else{
     get_token(s);
-    return command_filter(s);
+    return command_parse(s);
   }
 }

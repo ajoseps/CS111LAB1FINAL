@@ -406,138 +406,6 @@ command_parse(command_stream_t c_stream)
 {
   command_t comm = checked_malloc(sizeof(struct command));
   
-  while(c_stream->nextToken.type == NEWLINE)
-  {
-    get_token(c_stream);
-    c_stream->linecount++;
-  }
-  printf("linecount: %i \n", c_stream->linecount);
-  printf("curr buffer: %s \n", c_stream->currToken.buffer);
-  printf("next buffer: %s \n", c_stream->nextToken.buffer);
-  switch(c_stream->nextToken.type)
-  {
-    case NEWLINE_T:
-    case SEQUENCE_T:
-    {
-      command_t operand1 = command_parse(c_stream);
-      while(c_stream->nextToken.type == NEWLINE_T || c_stream->nextToken.type == SEQUENCE_T)
-      {
-        get_token(c_stream);
-        if(c_stream->nextToken.type == EOF_T)
-          break;
-        else
-        {
-          command_t operand2 = command_parse(c_stream);
-          
-          comm->type = SEQUENCE_COMMAND;
-          comm->status = -1;
-          comm->input = 0;
-          comm->output = 0;
-          comm->u.command[0] = operand1;
-          comm->u.command[1] = operand2;
-        }
-      }
-      break;
-    }
-    case AND_T:
-    case OR_T:
-    {
-      command_t operand1 = command_parse(c_stream);
-      while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
-      {
-        get_token(c_stream);
-        command_t operand2 = command_parse(c_stream);
-        
-        if(c_stream->currToken.type == AND_T)
-        {
-          comm->type = AND_COMMAND;
-          
-        }
-        else if(c_stream->currToken.type == OR_T)
-        {
-          comm->type = OR_COMMAND;
-        }
-        comm->status=-1;
-        comm->input=0;
-        comm->output=0;
-        comm->u.command[0]=operand1;
-        comm->u.command[1]=operand2;
-      }
-      break;
-    }
-    case PIPE_T:
-    {
-      command_t operand1 = command_parse(c_stream);
-      while(c_stream->nextToken.type == PIPE_T)
-      {
-        get_token(c_stream);
-        command_t operand2 = command_parse(c_stream);
-        
-        comm->status=-1;
-        comm->input=0;
-        comm->output=0;
-        comm->u.command[0]=operand1;
-        comm->u.command[1]=operand2;
-      }
-      break;
-    }
-    case SIMPLE_T:
-    {
-      get_token(c_stream);
-      
-      if(c_stream->currToken.type == EOF_T)
-        return NULL;
-      else if(c_stream->currToken.type != SIMPLE_T)
-      {
-        //error (1, 0, "command reading not yet implemented");
-        printf("command filter simple error");
-        return NULL;
-      }
-      comm->input = 0;
-      comm->output = 0;
-      comm->status=-1;
-      strcpy(*comm->u.word, c_stream->currToken.buffer);
-      
-      if(c_stream->nextToken.type == LESS_T)
-      {
-        get_token(c_stream);
-        if(c_stream->nextToken.type == SIMPLE_T)
-        {
-          comm->input= checked_malloc(sizeof( strlen(c_stream->currToken.buffer)) + 1);
-          comm->input = strcpy(comm->input, c_stream->currToken.buffer);
-        }
-        else
-        {
-          // error(1, 0, "error!");
-          printf("Error!");
-        }
-      }
-      else if(c_stream->nextToken.type == GREATER_T)
-      {
-        get_token(c_stream);
-        if(c_stream->nextToken.type == SIMPLE_T)
-        {
-          comm->output = checked_malloc(sizeof( strlen(c_stream->currToken.buffer)) + 1);
-          comm->output = strcpy(comm->input, c_stream->currToken.buffer);
-        }
-        else
-        {
-          // error(1, 0, "error!");
-          printf("Error!");
-        }
-      }
-      break;
-    }
-  }
-  return comm;
-}
-
-command_t
-read_command_stream (command_stream_t s)
->>>>>>> 2f981a9cc9e4f2964fe5f8871b36bf0b051658fe
-{
-  command_t comm = checked_malloc(sizeof(struct command));
-  
   while(c_stream->nextToken.type == NEWLINE_T)
   {
     get_token(c_stream);
@@ -576,6 +444,8 @@ read_command_stream (command_stream_t s)
     case AND_T:
     case OR_T:
     {
+      printf("ENTERING AND/OR");
+      //get_token(c_stream);
       command_t operand1 = command_parse(c_stream);
       while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
       {
@@ -601,12 +471,15 @@ read_command_stream (command_stream_t s)
     }
     case PIPE_T:
     {
+      printf("ENTERING PIPE");
+      //get_token(c_stream);
       command_t operand1 = command_parse(c_stream);
       while(c_stream->nextToken.type == PIPE_T)
       {
         get_token(c_stream);
         command_t operand2 = command_parse(c_stream);
         
+        comm->type = PIPE_COMMAND;
         comm->status=-1;
         comm->input=0;
         comm->output=0;
@@ -640,16 +513,17 @@ read_command_stream (command_stream_t s)
 
       comm->u.word = tmpWord;
       
-
-      //strcpy(*comm->u.word, c_stream->currToken.buffer);
       
       if(c_stream->nextToken.type == LESS_T)
       {
         get_token(c_stream);
         if(c_stream->nextToken.type == SIMPLE_T)
         {
-          comm->input= checked_malloc(sizeof( strlen(c_stream->currToken.buffer)) + 1);
-          comm->input = strcpy(comm->input, c_stream->currToken.buffer);
+          comm->input = checked_malloc(sizeof( strlen(c_stream->nextToken.buffer)) + 1);
+          comm->input = strcpy(comm->input, c_stream->nextToken.buffer);
+
+          //get next token to see if it's greater
+          get_token(c_stream);
         }
         else
         {
@@ -657,13 +531,18 @@ read_command_stream (command_stream_t s)
           printf("Error!");
         }
       }
-      else if(c_stream->nextToken.type == GREATER_T)
+      
+      if(c_stream->nextToken.type == GREATER_T)
       {
+
         get_token(c_stream);
         if(c_stream->nextToken.type == SIMPLE_T)
         {
-          comm->output = checked_malloc(sizeof( strlen(c_stream->currToken.buffer)) + 1);
-          comm->output = strcpy(comm->input, c_stream->currToken.buffer);
+          comm->output = checked_malloc(sizeof( strlen(c_stream->nextToken.buffer)) + 1);
+          comm->output = strcpy(comm->input, c_stream->nextToken.buffer);
+
+          //get next token so we see next operand/operator
+          get_token(c_stream);
         }
         else
         {

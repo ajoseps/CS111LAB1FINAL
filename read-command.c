@@ -422,7 +422,6 @@ command_t
 command_parse(command_stream_t c_stream)
 {
   command_t comm = checked_malloc(sizeof(struct command));
- 
   while(c_stream->nextToken.type == NEWLINE_T)
   {
     get_token(c_stream);
@@ -567,7 +566,6 @@ command_parse(command_stream_t c_stream)
         }
       }
       c_stream->curr_command = comm;
-
       break;
     }
     default:
@@ -582,7 +580,6 @@ command_parse(command_stream_t c_stream)
 command_t
 read_command_stream (command_stream_t s)
 {
-
   if(s->startReadToken)
     get_token(s);
   s->startReadToken = false;

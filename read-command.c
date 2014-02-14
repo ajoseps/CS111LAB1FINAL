@@ -61,6 +61,8 @@ typedef struct{
 } token;
 
 struct command_stream{
+  command_t curr_command;
+  
   // Function and argument pointer
   int (*get_next_byte)(void *);
   void *arg;
@@ -71,7 +73,6 @@ struct command_stream{
   int pcount;
   
   // Tokens
-  token prevToken;
   token currToken;
   token nextToken;
   int maxTokenLength;
@@ -97,16 +98,14 @@ init_command_stream(command_stream_t c_stream, int (*get_next_byte) (void *), vo
   c_stream->arg = get_next_byte_argument;
   
   c_stream->linecount = 1;
+  c_stream->curr_command = NULL;
   
-  c_stream->prevToken.buffer = checked_malloc(sizeof(char) * MAX_TOKEN_LENGTH);
   c_stream->currToken.buffer = checked_malloc(sizeof(char) * MAX_TOKEN_LENGTH);
   c_stream->nextToken.buffer = checked_malloc(sizeof(char) * MAX_TOKEN_LENGTH);
   
-  c_stream->prevToken.buffer[0] = NULL_TERMINATOR;
   c_stream->currToken.buffer[0] = NULL_TERMINATOR;
   c_stream->nextToken.buffer[0] = NULL_TERMINATOR;
   
-  c_stream->prevToken.type = NULL_T;
   c_stream->currToken.type = NULL_T;
   c_stream->nextToken.type = NULL_T;
   
@@ -131,6 +130,7 @@ make_command_stream (int (*get_next_byte) (void *),
   return c_stream;
 }
 
+/*
 command_stream_t
 unget_token(command_stream_t c_stream)
 {
@@ -152,18 +152,25 @@ unget_token(command_stream_t c_stream)
   }
   return c_stream;
 }
-
+*/
 token
 get_token(command_stream_t c_stream)
 {
   char* nextTokenBuffer = c_stream->nextToken.buffer;
-  char* currTokenBuffer = c_stream->currToken.buffer;
+  //char* currTokenBuffer = c_stream->currToken.buffer;
+  if(nextTokenBuffer == NULL)
+  {
+    token eof;
+    eof.buffer = NULL;
+    eof.type = EOF_T;
+    return eof;
+  }
   
   //printf("This is current buffer: %s\n", c_stream->currToken.buffer);
   //printf("This is next buffer: %s\n", c_stream->nextToken.buffer);
-  strcpy(c_stream->prevToken.buffer, currTokenBuffer);
+  //strcpy(c_stream->prevToken.buffer, currTokenBuffer);
   strcpy(c_stream->currToken.buffer, nextTokenBuffer);
-  c_stream->prevToken.type = c_stream->currToken.type;
+  //c_stream->prevToken.type = c_stream->currToken.type;
   c_stream->currToken.type = c_stream->nextToken.type;
   nextTokenBuffer[0] = NULL_TERMINATOR;
   
@@ -189,10 +196,9 @@ get_token(command_stream_t c_stream)
     
     if(curr == EOF || curr == -1)
     {
-      token endToken;
-      endToken.buffer = NULL;
-      endToken.type = EOF_T;
-      return endToken;
+      c_stream->nextToken.buffer = NULL;
+      c_stream->nextToken.type = EOF_T;
+      break;
     }
     if(is_legal_char(curr))
     {
@@ -435,20 +441,27 @@ command_parse(command_stream_t c_stream)
 {
   command_t comm = checked_malloc(sizeof(struct command));
   
+  
   while(c_stream->nextToken.type == NEWLINE_T)
   {
     get_token(c_stream);
-    
     c_stream->linecount++;
-    
+    if(c_stream->nextToken.type == EOF_T)
+    {
+      return comm;
+    }
   }
-  get_token(c_stream);
+  
   switch(c_stream->nextToken.type)
   {
+    case EOF_T:
+    {
+      break;
+    }
     case NEWLINE_T:
     case SEQUENCE_T:
     {
-      command_t operand1 = command_parse(c_stream);
+      command_t operand1 = c_stream->curr_command;
       while(c_stream->nextToken.type == NEWLINE_T || c_stream->nextToken.type == SEQUENCE_T)
       {
         get_token(c_stream);
@@ -472,8 +485,7 @@ command_parse(command_stream_t c_stream)
     case OR_T:
     {
       printf("ENTERING AND/OR");
-      //get_token(c_stream);
-      command_t operand1 = command_parse(c_stream);
+      command_t operand1 = c_stream->curr_command;
       while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
       {
         get_token(c_stream);
@@ -499,8 +511,7 @@ command_parse(command_stream_t c_stream)
     case PIPE_T:
     {
       printf("ENTERING PIPE");
-      //get_token(c_stream);
-      command_t operand1 = command_parse(c_stream);
+      command_t operand1 = c_stream->curr_command;
       while(c_stream->nextToken.type == PIPE_T)
       {
         get_token(c_stream);
@@ -517,6 +528,7 @@ command_parse(command_stream_t c_stream)
     }
     case SIMPLE_T:
     {
+      get_token(c_stream);
       if(c_stream->currToken.type == EOF_T)
         return NULL;
       else if(c_stream->currToken.type != SIMPLE_T)
@@ -564,7 +576,7 @@ command_parse(command_stream_t c_stream)
         if(c_stream->nextToken.type == SIMPLE_T)
         {
           comm->output = checked_malloc(sizeof( strlen(c_stream->nextToken.buffer)) + 1);
-          comm->output = strcpy(comm->input, c_stream->nextToken.buffer);
+          comm->output = strcpy(comm->output, c_stream->nextToken.buffer);
 
           //get next token so we see next operand/operator
           get_token(c_stream);
@@ -575,6 +587,7 @@ command_parse(command_stream_t c_stream)
           printf("Error!");
         }
       }
+      c_stream->curr_command = comm;
       break;
     }
     default:

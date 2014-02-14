@@ -58,7 +58,6 @@ options_exhausted:;
     command_t command;
     while ((command = read_command_stream (command_stream)))
     {
-      printf("IS IT ENTERING HERE?");
         // Uncomment these for Lab 1B
       //  if (print_tree)
       //  {

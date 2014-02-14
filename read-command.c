@@ -471,7 +471,9 @@ command_parse(command_stream_t c_stream)
     case AND_T:
     case OR_T:
     {
-      command_t operand1 = command_parse(unget_token(c_stream));
+      printf("ENTERING AND/OR");
+      //get_token(c_stream);
+      command_t operand1 = command_parse(c_stream);
       while(c_stream->nextToken.type == AND_T || c_stream->nextToken.type == OR_T)
       {
         get_token(c_stream);
@@ -496,12 +498,15 @@ command_parse(command_stream_t c_stream)
     }
     case PIPE_T:
     {
-      command_t operand1 = command_parse(unget_token(c_stream));
+      printf("ENTERING PIPE");
+      //get_token(c_stream);
+      command_t operand1 = command_parse(c_stream);
       while(c_stream->nextToken.type == PIPE_T)
       {
         get_token(c_stream);
         command_t operand2 = command_parse(c_stream);
         
+        comm->type = PIPE_COMMAND;
         comm->status=-1;
         comm->input=0;
         comm->output=0;
@@ -539,8 +544,11 @@ command_parse(command_stream_t c_stream)
         get_token(c_stream);
         if(c_stream->nextToken.type == SIMPLE_T)
         {
-          comm->input= checked_malloc(sizeof( strlen(c_stream->nextToken.buffer)) + 1);
+          comm->input = checked_malloc(sizeof( strlen(c_stream->nextToken.buffer)) + 1);
           comm->input = strcpy(comm->input, c_stream->nextToken.buffer);
+
+          //get next token to see if it's greater
+          get_token(c_stream);
         }
         else
         {
@@ -548,13 +556,18 @@ command_parse(command_stream_t c_stream)
           printf("Error!");
         }
       }
-      else if(c_stream->nextToken.type == GREATER_T)
+      
+      if(c_stream->nextToken.type == GREATER_T)
       {
+
         get_token(c_stream);
         if(c_stream->nextToken.type == SIMPLE_T)
         {
           comm->output = checked_malloc(sizeof( strlen(c_stream->nextToken.buffer)) + 1);
           comm->output = strcpy(comm->input, c_stream->nextToken.buffer);
+
+          //get next token so we see next operand/operator
+          get_token(c_stream);
         }
         else
         {

@@ -115,9 +115,6 @@ command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
 		     void *get_next_byte_argument)
 {
-  printf("command reading not yet implemented \n");
-  //error (1, 0, "command reading not yet implemented");
-  
   command_stream_t c_stream = checked_malloc(sizeof(struct command_stream));
   c_stream = init_command_stream(c_stream, get_next_byte, get_next_byte_argument);
   /*
@@ -413,21 +410,11 @@ command_parse(command_stream_t c_stream)
   {
     get_token(c_stream);
 
-    printf("line count was %d ", c_stream->linecount);
     c_stream->linecount++;
-    printf("-> %d \n", c_stream->linecount);
 
-    printf("type2: %d \n", c_stream->nextToken.type);
   }
-
-  printf("linecount: %i \n", c_stream->linecount);
-  printf("curr buffer: %s \n", c_stream->currToken.buffer);
-  printf("next buffer: %s \n", c_stream->nextToken.buffer);
-  printf("next type: %d \n", c_stream->nextToken.type);
-
+  
   token_type tokType = c_stream->nextToken.type;
-  printf("blah: %d \n", tokType);
-
 
   switch(c_stream->nextToken.type)
   {
@@ -508,10 +495,21 @@ command_parse(command_stream_t c_stream)
         printf("command filter simple error");
         return NULL;
       }
+      comm->type = SIMPLE_COMMAND;
       comm->input = 0;
       comm->output = 0;
       comm->status=-1;
-      strcpy(*comm->u.word, c_stream->currToken.buffer);
+
+      char** tmpWord = checked_malloc(sizeof(char*) * 50);
+      tmpWord[0] = checked_malloc(strlen(c_stream->currToken.buffer) + 1);
+      strcpy(tmpWord[0],c_stream->currToken.buffer);
+
+      tmpWord[1] = NULL_TERMINATOR;
+
+      comm->u.word = tmpWord;
+      
+
+      //strcpy(*comm->u.word, c_stream->currToken.buffer);
       
       if(c_stream->nextToken.type == LESS_T)
       {
@@ -550,17 +548,12 @@ command_parse(command_stream_t c_stream)
     }
   }
 
-printf("something is returned");
-
   return comm;
 }
 
 command_t
 read_command_stream (command_stream_t s)
 {
-  printf("command reading not yet implemented");
-  //error (1, 0, "command reading not yet implemented");
-  
   get_token(s);
 
   if(s->nextToken.type == EOF_T)
